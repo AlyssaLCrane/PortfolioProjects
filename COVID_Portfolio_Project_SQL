@@ -1,0 +1,154 @@
+Select *
+From dbo.CovidDeaths2
+where continent is not null
+order by 3,4
+
+--Select *
+-----From dbo.CovidVaccinations
+--Order by 3,4
+
+-- Select Data that we are going to be using
+
+--Select location, date, total_cases, new_cases, total_deaths
+--From dbo.CovidDeaths2
+--Order by 1,2
+
+-- Looking at Total Cases vs Total Deaths
+-- Shows likelihood of dying if you contract covid in your country
+Select location, date, total_cases, total_deaths, (total_deaths/total_cases)*100 as DeathPercentage
+From dbo.CovidDeaths2
+where location = 'United States'
+Order by 1,2
+
+-- Looking at the total cases vs the population
+-- Shows what percentage of population got Covid
+
+Select location, date, total_cases, total_deaths, Population, cast((total_deaths/population) as INT)*100 as PercentPopulationInfected
+From dbo.CovidDeaths2
+where location = 'United States'
+Order by 1,2
+
+-- Looking at countries with highest infection rate compared to population
+Select location, Population,  MAX(total_cases) as HighestInfectionCount, MAX(total_deaths/population)*100.00 as PercentPopulationInfected
+From dbo.CovidDeaths2
+--where location = 'United States'
+Group by location, population
+Order by PercentPopulationInfected desc
+
+
+
+-- Showing countries with highest death count per population
+Select location, MAX(cast(total_deaths as INT)) as TotalDeathCount
+From dbo.CovidDeaths2
+--where location = 'United States'
+where continent is not null
+Group by location
+Order by TotalDeathCount desc
+
+
+-- Let's break things down by continent
+-- Below is the right way 
+
+Select location, MAX(cast(total_deaths as INT)) as TotalDeathCount
+From dbo.CovidDeaths2
+--where location = 'United States'
+where continent is null
+Group by location
+Order by TotalDeathCount desc
+
+-- back to before
+Select continent, MAX(cast(total_deaths as INT)) as TotalDeathCount
+From dbo.CovidDeaths2
+--where location = 'United States'
+where continent is not null
+Group by continent
+Order by TotalDeathCount desc
+
+-- Showing continents with the highest death count per population
+
+Select continent, MAX(cast(total_deaths as INT)) as TotalDeathCount
+From dbo.CovidDeaths2
+--where location = 'United States'
+where continent is not null
+Group by continent
+Order by TotalDeathCount desc
+
+-- Global numbers
+
+Select SUM(new_cases), SUM(cast(new_deaths as INT)), SUM(cast(new_deaths as INT))/Sum(new_cases)*100 as DeathPercentage
+From dbo.CovidDeaths2
+--where location = 'United States'
+where continent is not null
+--Group by date
+Order by 1,2
+
+-- Looking at total pop vs vaccinations
+
+Select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+, SUM(CONVERT(int,vac.new_vaccinations)) OVER (Partition by dea.location Order by dea.location, dea.date) as RollingPeopleVaccinated
+--, (RollingPeopleVaccinated/Population)*100 -- need temp table
+from dbo.CovidDeaths2 dea
+JOIN dbo.CovidVaccinations vac
+    ON dea.location = vac.location
+    and dea.date = vac.date
+Where dea.continent is not null
+Order by 1,2,3
+
+-- Use CTE
+
+With PopvsVac (Continent, locatino, date, population, new_vaccinations, RollingPeopleVaccinated)
+as 
+(
+    Select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+, SUM(CONVERT(int,vac.new_vaccinations)) OVER (Partition by dea.location Order by dea.location, dea.date) as RollingPeopleVaccinated
+--, (RollingPeopleVaccinated/Population)*100 -- need temp table
+from dbo.CovidDeaths2 dea
+JOIN dbo.CovidVaccinations vac
+    ON dea.location = vac.location
+    and dea.date = vac.date
+Where dea.continent is not null
+--Order by 2,3
+)
+Select *, (RollingPeopleVaccinated/population)*100
+from PopvsVac
+
+-- TEMP table
+Drop table if exists #PercentPopulationVaccinated --- build into top of query so that if you make changes no extra deletion is needed
+Create Table #PercentPopulationVaccinated
+(
+    Continent nvarchar(255),
+    Location nvarchar(255),
+    Date datetime,
+    Population numeric,
+    New_vaccinations numeric,
+    RollingPeopleVaccinated numeric
+)
+Insert into #PercentPopulationVaccinated
+Select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+, SUM(CONVERT(int,vac.new_vaccinations)) OVER (Partition by dea.location Order by dea.location, dea.date) as RollingPeopleVaccinated
+--, (RollingPeopleVaccinated/Population)*100 -- need temp table
+from dbo.CovidDeaths2 dea
+JOIN dbo.CovidVaccinations vac
+    ON dea.location = vac.location
+    and dea.date = vac.date
+--Where dea.continent is not null
+--Order by 2,3
+
+Select *, (RollingPeopleVaccinated/population)*100
+from #PercentPopulationVaccinated
+
+-- Creating View to store data for later visualizations
+
+Create View PercentPopulationVaccinated AS
+Select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+, SUM(CONVERT(int,vac.new_vaccinations)) OVER (Partition by dea.location Order by dea.location, dea.date) as RollingPeopleVaccinated
+--, (RollingPeopleVaccinated/Population)*100 -- need temp table
+from dbo.CovidDeaths2 dea
+JOIN dbo.CovidVaccinations vac
+    ON dea.location = vac.location
+    and dea.date = vac.date
+Where dea.continent is not null
+--Order by 2,3
+
+Select *
+from PercentPopulationVaccinated
